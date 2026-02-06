@@ -19,9 +19,13 @@ TODO for students:
 
 import socket
 import sys
+import time
+import argparse
+import ipaddress
+from concurrent.futures import ThreadPoolExecutor
 
 
-def scan_port(target, port, timeout=1.0):
+def scan_port(target, port, timeout=.1):
     """
     Scan a single port on the target host
 
@@ -33,20 +37,37 @@ def scan_port(target, port, timeout=1.0):
     Returns:
         bool: True if port is open, False otherwise
     """
-    try:
-        # TODO: Create a socket
-        # TODO: Set timeout
-        # TODO: Try to connect to target:port
-        # TODO: Close the socket
-        # TODO: Return True if connection successful
+    # Stores the current time to calculate elapsed time for the scan of one port
+    start_time = time.time()
 
-        pass  # Remove this and implement
+    try:
+        # Create a socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Set timeout
+        s.settimeout(timeout)
+        # Try to connect to target:port
+        result = s.connect_ex((target, port))
+        # Measure elapsed time for the connection attempt
+        elapsed = time.time() - start_time
+        if result == 0:
+            # Grab banner 
+            try:
+                s.sendall(b"HEAD / HTTP/1.0\r\n\r\n")
+                banner = s.recv(1024).decode(errors="ignore").strip()
+            except:
+                banner = ""
+            # Close the socket and return True
+            s.close()
+            return True, banner, elapsed
+        # Close the socket and return False
+        s.close()
+        return False, None, elapsed
 
     except (socket.timeout, ConnectionRefusedError, OSError):
-        return False
+        return False, None, elapsed
 
 
-def scan_range(target, start_port, end_port):
+def scan_range(target, start_port, end_port, threads=100):
     """
     Scan a range of ports on the target host
 
@@ -63,45 +84,51 @@ def scan_range(target, start_port, end_port):
     print(f"[*] Scanning {target} from port {start_port} to {end_port}")
     print(f"[*] This may take a while...")
 
-    # TODO: Implement the scanning logic
-    # Hint: Loop through port range and call scan_port()
-    # Hint: Consider using threading for better performance
+    # Run one port scan in a separate thread
+    def worker(port):
+        open_flag, banner, elapsed = scan_port(target, port)
+        if open_flag:
+            print(f"[+] {target}:{port} OPEN ({elapsed:.4f}s)")
+            open_ports.append((port, banner, elapsed))
+            if banner:
+                print(f"    Banner: {banner[:80]}")
+        #else:
+        #    print(f"[-] {target}:{port} CLOSED ({elapsed:.4f}s)")
 
-    for port in range(start_port, end_port + 1):
-        # TODO: Scan this port
-        # TODO: If open, add to open_ports list
-        # TODO: Print progress (optional)
-        pass  # Remove this and implement
+    # Use ThreadPoolExecutor to scan ports in parallel
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        executor.map(worker, range(start_port, end_port + 1))
 
     return open_ports
 
 
 def main():
     """Main function"""
-    # TODO: Parse command-line arguments
-    # TODO: Validate inputs
-    # TODO: Call scan_range()
-    # TODO: Display results
 
-    # Example usage (you should improve this):
-    if len(sys.argv) < 2:
-        print("Usage: python3 port_scanner_template.py <target>")
-        print("Example: python3 port_scanner_template.py 172.20.0.10")
-        sys.exit(1)
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Custom Port Scanner")
+    parser.add_argument("--target", required=True, help="Target IP or CIDR (e.g. 172.20.0.0/24)")
+    parser.add_argument("--ports", required=True, help="Port range (e.g. 1-10000)")
+    parser.add_argument("--threads", type=int, default=100)
 
-    target = sys.argv[1]
-    start_port = 1
-    end_port = 1024  # Scan first 1024 ports by default
+    args = parser.parse_args()
 
-    print(f"[*] Starting port scan on {target}")
+    start_port, end_port = map(int, args.ports.split("-"))
 
-    open_ports = scan_range(target, start_port, end_port)
+    # Handle CIDR or single IP
+    targets = []
+    if "/" in args.target:
+        network = ipaddress.ip_network(args.target, strict=False)
+        targets = [str(ip) for ip in network.hosts()]
+    else:
+        targets = [args.target]
 
-    print(f"\n[+] Scan complete!")
-    print(f"[+] Found {len(open_ports)} open ports:")
-    for port in open_ports:
-        print(f"    Port {port}: open")
+    print(f"[*] Scanning {len(targets)} hosts...")
 
+    # Loop through each target host and scan the specified port range
+    for host in targets:
+        print(f"\n[*] Scanning host {host}")
+        scan_range(host, start_port, end_port, args.threads)
 
 if __name__ == "__main__":
     main()
