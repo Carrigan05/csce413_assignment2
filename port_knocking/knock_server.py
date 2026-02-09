@@ -5,6 +5,7 @@ import argparse
 import logging
 import socket
 import time
+import subprocess
 
 DEFAULT_KNOCK_SEQUENCE = [1234, 5678, 9012]
 DEFAULT_PROTECTED_PORT = 2222
@@ -22,13 +23,21 @@ def setup_logging():
 def open_protected_port(protected_port):
     """Open the protected port using firewall rules."""
     # TODO: Use iptables/nftables to allow access to protected_port.
-    logging.info("TODO: Open firewall for port %s", protected_port)
+    logging.info("[+] Opening protected port %s", protected_port)
+    subprocess.run(
+        ["iptables", "-I", "INPUT", "-p", "tcp", "--dport", str(protected_port), "-j", "ACCEPT"],
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def close_protected_port(protected_port):
     """Close the protected port using firewall rules."""
     # TODO: Remove firewall rules for protected_port.
-    logging.info("TODO: Close firewall for port %s", protected_port)
+    logging.info("[-] Closing protected port %s", protected_port)
+    subprocess.run(
+        ["iptables", "-D", "INPUT", "-p", "tcp", "--dport", str(protected_port), "-j", "ACCEPT"],
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def listen_for_knocks(sequence, window_seconds, protected_port):
@@ -37,11 +46,63 @@ def listen_for_knocks(sequence, window_seconds, protected_port):
     logger.info("Listening for knocks: %s", sequence)
     logger.info("Protected port: %s", protected_port)
 
+
     # TODO: Create UDP or TCP listeners for each knock port.
     # TODO: Track each source IP and its progress through the sequence.
     # TODO: Enforce timing window per sequence.
     # TODO: On correct sequence, call open_protected_port().
     # TODO: On incorrect sequence, reset progress.
+
+    # Track progress per IP
+    client_state = {}
+
+    def handle_knock(port):
+        """Listen for knocks on a single port."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("0.0.0.0", port))
+        sock.listen(5)
+        logger.info(f"Listening on knock port {port}")
+
+        while True:
+            conn, addr = sock.accept()
+            ip = addr[0]
+            now = time.time()
+
+            # Initialize state for IP
+            if ip not in client_state:
+                client_state[ip] = {"progress": 0, "start": now}
+
+            state = client_state[ip]
+
+            # Reset if timeout exceeded
+            if now - state["start"] > window_seconds:
+                state["progress"] = 0
+                state["start"] = now
+
+            expected = sequence[state["progress"]]
+
+            if port == expected:
+                state["progress"] += 1
+                logger.info(f"[+] {ip} correct knock {port} ({state['progress']}/{len(sequence)})")
+
+                # Completed sequence
+                if state["progress"] == len(sequence):
+                    logger.info(f"[+] {ip} completed knock sequence!")
+                    open_protected_port(protected_port)
+                    state["progress"] = 0
+            else:
+                logger.warning(f"[-] {ip} wrong knock {port}, resetting")
+                state["progress"] = 0
+                state["start"] = now
+
+            conn.close()
+
+    # Start listener threads for each knock port
+    for port in sequence:
+        import threading
+        t = threading.Thread(target=handle_knock, args=(port,))
+        t.daemon = True
+        t.start()
 
     while True:
         time.sleep(1)
