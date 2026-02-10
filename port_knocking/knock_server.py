@@ -8,7 +8,7 @@ import time
 from collections import defaultdict
 
 DEFAULT_KNOCK_SEQUENCE = [1234, 5678, 9012]
-DEFAULT_PROTECTED_PORT = 2222
+DEFAULT_PROTECTED_PORT = 8888
 DEFAULT_SEQUENCE_WINDOW = 10.0
 
 client_state = defaultdict(lambda: {"index": 0, "start": 0})
