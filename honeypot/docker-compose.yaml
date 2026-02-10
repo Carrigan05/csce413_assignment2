@@ -4,7 +4,8 @@ services:
   honeypot:
     build: .
     container_name: ssh_honeypot
+    user: root
     ports:
-      - "2222:22"   # Map host port 2222 to container port 22
+      - "2222:22"   
     volumes:
       - ./logs:/app/logs
