@@ -4,6 +4,6 @@ services:
     container_name: ssh_honeypot
     user: root
     ports:
-      - "2222:22"   
+      - "2222:22222"   
     volumes:
       - ./logs:/app/logs
