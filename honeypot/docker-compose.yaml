@@ -1,9 +1,0 @@
-services:
-  honeypot:
-    build: .
-    container_name: ssh_honeypot
-    user: root
-    ports:
-      - "2222:22"   
-    volumes:
-      - ./logs:/app/logs
