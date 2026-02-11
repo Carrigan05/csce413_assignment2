@@ -6,6 +6,7 @@ import logging
 import socket
 import threading
 import time
+import subprocess
 
 DEFAULT_KNOCK_SEQUENCE = [1234, 5678, 9012]
 DEFAULT_PROTECTED_PORT = 2222
@@ -24,26 +25,18 @@ def setup_logging():
         handlers=[logging.StreamHandler()],
     )
 
-def protected_port_server(protected_port):
-    """Simulated protected port server (just TCP listener)."""
-    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_sock.bind(("", protected_port))
-    server_sock.listen(5)
-    logging.info(f"[*] Protected port {protected_port} listening (simulation)")
+def block_port(port):
+    """Block the protected port for all IPs initially."""
+    subprocess.run(["iptables", "-A", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP"])
 
-    while True:
-        client_sock, addr = server_sock.accept()
-        ip = addr[0]
-        with lock:
-            if ip in clients_allowed:
-                client_sock.sendall(b"Access granted!\n")
-                logging.info(f"[+] Allowed access from {ip}")
-            else:
-                client_sock.sendall(b"Access denied!\n")
-                logging.info(f"[-] Denied access from {ip}")
-        client_sock.close()
+def allow_ip(ip, port):
+    """Allow a specific IP to access the protected port."""
+    subprocess.run([
+        "iptables", "-I", "INPUT", "-p", "tcp", "-s", ip, "--dport", str(port), "-j", "ACCEPT"
+    ])
+    logging.info(f"[+] {ip} is now allowed to access port {port}")
 
-def knock_listener(sequence, window_seconds):
+def knock_listener(sequence, window_seconds, protected_port):
     """Listen for knock sequence on UDP ports."""
     logger = logging.getLogger("KnockServer")
 
@@ -74,16 +67,17 @@ def knock_listener(sequence, window_seconds):
                     ]
 
                     ports = [p for p, _ in clients_progress[ip]]
-                    if ports[-len(sequence):] == sequence:
+                    if ports[-len(sequence):] == sequence and ip not in clients_allowed:
                         logger.info(f"[+] {ip} completed knock sequence!")
                         clients_allowed.add(ip)
+                        allow_ip(ip, protected_port)
                         clients_progress[ip] = []
 
             except socket.timeout:
                 continue
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Python-only port knocking server")
+    parser = argparse.ArgumentParser(description="Python port knocking server using iptables")
     parser.add_argument(
         "--sequence",
         default=",".join(str(p) for p in DEFAULT_KNOCK_SEQUENCE),
@@ -112,12 +106,12 @@ def main():
     except ValueError:
         raise SystemExit("Invalid sequence. Use comma-separated integers.")
 
-    # Start protected port server in a separate thread
-    t = threading.Thread(target=protected_port_server, args=(args.protected_port,), daemon=True)
-    t.start()
+    # Block the protected port at the start
+    block_port(args.protected_port)
+    logging.info(f"[*] Protected port {args.protected_port} blocked for all IPs")
 
     # Start knock listener (main thread)
-    knock_listener(sequence, args.window)
+    knock_listener(sequence, args.window, args.protected_port)
 
 if __name__ == "__main__":
     main()
