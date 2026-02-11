@@ -8,4 +8,4 @@ RUN apt-get update \
 
 COPY knock_server.py knock_client.py ./
 
-//CMD ["python3", "knock_server.py"]
+CMD ["python3", "knock_server.py"]
