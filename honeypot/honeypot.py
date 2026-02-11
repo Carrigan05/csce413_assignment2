@@ -1,31 +1,70 @@
 #!/usr/bin/env python3
 """Starter template for the honeypot assignment."""
 
-import logging
-import os
+import socket
+import threading
 import time
+from logger import create_logger, log_auth_attempt, log_command
 
-LOG_PATH = "/app/logs/honeypot.log"
+HOST = "0.0.0.0"  # Listen on all interfaces
+PORT = 2222       # Use 2222 for testing, avoid requiring root for 22
 
+logger = create_logger()
 
-def setup_logging():
-    os.makedirs("/app/logs", exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler(LOG_PATH), logging.StreamHandler()],
-    )
+BANNER = "SSH-2.0-OpenSSH_7.9p1 FakeSSH_1.0\r\n"
+
+def handle_client(client_socket, address):
+    ip, port = address
+    logger.info(f"Connection from {ip}:{port}")
+    
+    try:
+        # Send SSH banner
+        client_socket.send(BANNER.encode())
+
+        # Receive attempted username/password
+        client_socket.send(b"Username: ")
+        username = client_socket.recv(1024).decode().strip()
+
+        client_socket.send(b"Password: ")
+        password = client_socket.recv(1024).decode().strip()
+
+        # Log authentication attempt (always fail for realism)
+        log_auth_attempt(logger, ip, port, username, password, success=False)
+
+        # Fake shell interaction
+        client_socket.send(b"\r\nWelcome to FakeSSH!\r\n")
+        while True:
+            client_socket.send(b"$ ")
+            command = client_socket.recv(1024).decode().strip()
+            if not command:
+                break
+            log_command(logger, ip, command)
+            client_socket.send(b"Command not found\r\n")
+
+    except Exception as e:
+        logger.error(f"Error with {ip}:{port} - {e}")
+    finally:
+        client_socket.close()
+        logger.info(f"Connection closed {ip}:{port}")
 
 
 def run_honeypot():
-    logger = logging.getLogger("Honeypot")
-    logger.info("Honeypot starter template running.")
-    logger.info("TODO: Implement protocol simulation, logging, and alerting.")
+    logger.info("Starting SSH honeypot...")
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind((HOST, PORT))
+    server.listen(5)
+    logger.info(f"Honeypot listening on {HOST}:{PORT}")
 
-    while True:
-        time.sleep(60)
-
+    try:
+        while True:
+            client, addr = server.accept()
+            thread = threading.Thread(target=handle_client, args=(client, addr))
+            thread.start()
+    except KeyboardInterrupt:
+        logger.info("Honeypot shutting down...")
+    finally:
+        server.close()
 
 if __name__ == "__main__":
-    setup_logging()
     run_honeypot()

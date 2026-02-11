@@ -6,7 +6,6 @@ import os
 LOG_DIR = "/app/logs"
 LOG_FILE = os.path.join(LOG_DIR, "honeypot.log")
 
-
 def create_logger():
     """Create and return a configured logger object."""
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -38,3 +37,13 @@ def create_logger():
 
     logger.info("Logger initialized.")
     return logger
+
+def log_auth_attempt(logger, ip, port, username, password, success=False):
+    status = "SUCCESS" if success else "FAIL"
+    logger.info(
+        f"Authentication attempt from {ip}:{port} | "
+        f"user='{username}' password='{password}' | {status}"
+    )
+
+def log_command(logger, ip, command):
+    logger.info(f"Command from {ip}: {command}")
