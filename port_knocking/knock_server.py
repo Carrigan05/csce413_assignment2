@@ -70,7 +70,7 @@ def knock_listener(sequence, window_seconds, protected_port):
                         logger.info(f"[+] {ip} completed knock sequence!")
                         clients_allowed.add(ip)
                         # Uncomment if you want to manipulate iptables
-                        # allow_ip(ip, protected_port)
+                        allow_ip(ip, protected_port)
                         clients_progress[ip] = []
 
             except BlockingIOError:
