@@ -109,6 +109,10 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    ports:
+      - "1234:1234/udp"
+      - "5678:5678/udp"
+      - "9012:9012/udp"
     cap_add:
       - NET_ADMIN
     networks:
@@ -125,6 +129,7 @@ networks:
 
 volumes:
   db_data:
+
 
 
 
