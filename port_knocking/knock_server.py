@@ -4,14 +4,18 @@
 import argparse
 import logging
 import socket
+import threading
 import time
 
 DEFAULT_KNOCK_SEQUENCE = [1234, 5678, 9012]
 DEFAULT_PROTECTED_PORT = 2222
 DEFAULT_SEQUENCE_WINDOW = 10.0
 
-# Track clients allowed after correct sequence
+# Track which clients completed the knock sequence
 clients_allowed = set()
+clients_progress = {}  # {IP: [(port, timestamp), ...]}
+
+lock = threading.Lock()
 
 def setup_logging():
     logging.basicConfig(
@@ -20,13 +24,28 @@ def setup_logging():
         handlers=[logging.StreamHandler()],
     )
 
-def listen_for_knocks(sequence, window_seconds, protected_port):
-    logger = logging.getLogger("KnockServer")
-    logger.info("Starting Python-only port knocking server")
-    logger.info("Knock sequence: %s", sequence)
-    logger.info("Protected port: %s", protected_port)
+def protected_port_server(protected_port):
+    """Simulated protected port server (just TCP listener)."""
+    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_sock.bind(("", protected_port))
+    server_sock.listen(5)
+    logging.info(f"[*] Protected port {protected_port} listening (simulation)")
 
-    client_progress = {}  # {IP: [(port, timestamp), ...]}
+    while True:
+        client_sock, addr = server_sock.accept()
+        ip = addr[0]
+        with lock:
+            if ip in clients_allowed:
+                client_sock.sendall(b"Access granted!\n")
+                logging.info(f"[+] Allowed access from {ip}")
+            else:
+                client_sock.sendall(b"Access denied!\n")
+                logging.info(f"[-] Denied access from {ip}")
+        client_sock.close()
+
+def knock_listener(sequence, window_seconds):
+    """Listen for knock sequence on UDP ports."""
+    logger = logging.getLogger("KnockServer")
 
     # Create UDP sockets for each knock port
     sockets = []
@@ -35,7 +54,7 @@ def listen_for_knocks(sequence, window_seconds, protected_port):
         sock.bind(("", port))
         sockets.append(sock)
 
-    logger.info("Listening on ports %s", sequence)
+    logger.info(f"Listening for knocks on ports {sequence}")
     while True:
         for sock, expected_port in zip(sockets, sequence):
             sock.settimeout(0.1)
@@ -44,22 +63,21 @@ def listen_for_knocks(sequence, window_seconds, protected_port):
                 ip = addr[0]
                 now = time.time()
 
-                if ip not in client_progress:
-                    client_progress[ip] = []
+                with lock:
+                    if ip not in clients_progress:
+                        clients_progress[ip] = []
 
-                client_progress[ip].append((expected_port, now))
+                    clients_progress[ip].append((expected_port, now))
+                    # Keep only recent knocks in the window
+                    clients_progress[ip] = [
+                        (p, t) for p, t in clients_progress[ip] if now - t <= window_seconds
+                    ]
 
-                # Keep only recent knocks within the time window
-                client_progress[ip] = [
-                    (p, t) for p, t in client_progress[ip] if now - t <= window_seconds
-                ]
-
-                # Check if last N knocks match the sequence
-                ports = [p for p, _ in client_progress[ip]]
-                if ports[-len(sequence):] == sequence:
-                    logger.info("[+] %s completed sequence! Allowed access to port %d", ip, protected_port)
-                    clients_allowed.add(ip)
-                    client_progress[ip] = []  # Reset after success
+                    ports = [p for p, _ in clients_progress[ip]]
+                    if ports[-len(sequence):] == sequence:
+                        logger.info(f"[+] {ip} completed knock sequence!")
+                        clients_allowed.add(ip)
+                        clients_progress[ip] = []
 
             except socket.timeout:
                 continue
@@ -94,7 +112,12 @@ def main():
     except ValueError:
         raise SystemExit("Invalid sequence. Use comma-separated integers.")
 
-    listen_for_knocks(sequence, args.window, args.protected_port)
+    # Start protected port server in a separate thread
+    t = threading.Thread(target=protected_port_server, args=(args.protected_port,), daemon=True)
+    t.start()
+
+    # Start knock listener (main thread)
+    knock_listener(sequence, args.window)
 
 if __name__ == "__main__":
     main()
