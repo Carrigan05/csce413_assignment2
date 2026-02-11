@@ -12,7 +12,6 @@ DEFAULT_KNOCK_SEQUENCE = [1234, 5678, 9012]
 DEFAULT_PROTECTED_PORT = 2222
 DEFAULT_SEQUENCE_WINDOW = 10.0
 
-# Track which clients completed the knock sequence
 clients_allowed = set()
 clients_progress = {}  # {IP: [(port, timestamp), ...]}
 lock = threading.Lock()
@@ -31,15 +30,17 @@ def block_port(port):
 
 def allow_ip(ip, port):
     """Allow a specific IP to access the SSH port."""
-    subprocess.run(["iptables", "-I", "INPUT", "-p", "tcp", "-s", ip, "--dport", str(port), "-j", "ACCEPT"])
+    subprocess.run([
+        "iptables", "-I", "INPUT", "-p", "tcp", "-s", ip, "--dport", str(port), "-j", "ACCEPT"
+    ])
     logging.info(f"[+] {ip} is now allowed to access port {port}")
 
 def knock_listener(sequence, window_seconds, protected_port):
     """Listen for knock sequence on UDP ports."""
     logger = logging.getLogger("KnockServer")
-
-    # Create UDP sockets for each knock port
     sockets = []
+
+    # Bind UDP sockets for knocking
     for port in sequence:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -54,7 +55,13 @@ def knock_listener(sequence, window_seconds, protected_port):
             try:
                 _, addr = sock.recvfrom(1024)
                 ip = addr[0]
+
+                # Handle Docker NAT: if IP is localhost, get host IP
+                if ip == "127.0.0.1":
+                    ip = subprocess.getoutput("ip route get 1 | awk '{print $5}'").strip()
+
                 now = time.time()
+                logger.info(f"Knock received from {ip} on port {expected_port}")
 
                 with lock:
                     if ip not in clients_progress:
@@ -107,7 +114,7 @@ def main():
     # Block SSH port initially
     block_port(args.protected_port)
 
-    # Listen for knock sequence (main thread)
+    # Start listening for knocks
     knock_listener(sequence, args.window, args.protected_port)
 
 if __name__ == "__main__":
