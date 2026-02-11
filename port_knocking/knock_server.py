@@ -15,7 +15,6 @@ DEFAULT_SEQUENCE_WINDOW = 10.0
 # Track which clients completed the knock sequence
 clients_allowed = set()
 clients_progress = {}  # {IP: [(port, timestamp), ...]}
-
 lock = threading.Lock()
 
 def setup_logging():
@@ -26,14 +25,13 @@ def setup_logging():
     )
 
 def block_port(port):
-    """Block the protected port for all IPs initially."""
+    """Block the protected SSH port for all IPs initially."""
     subprocess.run(["iptables", "-A", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP"])
+    logging.info(f"[*] Port {port} blocked for all IPs")
 
 def allow_ip(ip, port):
-    """Allow a specific IP to access the protected port."""
-    subprocess.run([
-        "iptables", "-I", "INPUT", "-p", "tcp", "-s", ip, "--dport", str(port), "-j", "ACCEPT"
-    ])
+    """Allow a specific IP to access the SSH port."""
+    subprocess.run(["iptables", "-I", "INPUT", "-p", "tcp", "-s", ip, "--dport", str(port), "-j", "ACCEPT"])
     logging.info(f"[+] {ip} is now allowed to access port {port}")
 
 def knock_listener(sequence, window_seconds, protected_port):
@@ -44,15 +42,17 @@ def knock_listener(sequence, window_seconds, protected_port):
     sockets = []
     for port in sequence:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("", port))
         sockets.append(sock)
 
-    logger.info(f"Listening for knocks on ports {sequence}")
+    logger.info(f"[*] Listening for knocks on ports {sequence}")
+
     while True:
         for sock, expected_port in zip(sockets, sequence):
             sock.settimeout(0.1)
             try:
-                data, addr = sock.recvfrom(1024)
+                _, addr = sock.recvfrom(1024)
                 ip = addr[0]
                 now = time.time()
 
@@ -62,9 +62,7 @@ def knock_listener(sequence, window_seconds, protected_port):
 
                     clients_progress[ip].append((expected_port, now))
                     # Keep only recent knocks in the window
-                    clients_progress[ip] = [
-                        (p, t) for p, t in clients_progress[ip] if now - t <= window_seconds
-                    ]
+                    clients_progress[ip] = [(p, t) for p, t in clients_progress[ip] if now - t <= window_seconds]
 
                     ports = [p for p, _ in clients_progress[ip]]
                     if ports[-len(sequence):] == sequence and ip not in clients_allowed:
@@ -77,7 +75,7 @@ def knock_listener(sequence, window_seconds, protected_port):
                 continue
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Python port knocking server using iptables")
+    parser = argparse.ArgumentParser(description="Port knocking server for SSH")
     parser.add_argument(
         "--sequence",
         default=",".join(str(p) for p in DEFAULT_KNOCK_SEQUENCE),
@@ -87,13 +85,13 @@ def parse_args():
         "--protected-port",
         type=int,
         default=DEFAULT_PROTECTED_PORT,
-        help="Protected port",
+        help="Protected SSH port",
     )
     parser.add_argument(
         "--window",
         type=float,
         default=DEFAULT_SEQUENCE_WINDOW,
-        help="Seconds allowed to complete the sequence",
+        help="Seconds allowed to complete the knock sequence",
     )
     return parser.parse_args()
 
@@ -106,11 +104,10 @@ def main():
     except ValueError:
         raise SystemExit("Invalid sequence. Use comma-separated integers.")
 
-    # Block the protected port at the start
+    # Block SSH port initially
     block_port(args.protected_port)
-    logging.info(f"[*] Protected port {args.protected_port} blocked for all IPs")
 
-    # Start knock listener (main thread)
+    # Listen for knock sequence (main thread)
     knock_listener(sequence, args.window, args.protected_port)
 
 if __name__ == "__main__":
