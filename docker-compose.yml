@@ -52,8 +52,6 @@ services:
     build:
       context: ./secret_ssh
       network: host
-    ports:
-      - "2222:22"
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -131,6 +129,7 @@ networks:
 
 volumes:
   db_data:
+
 
 
 
