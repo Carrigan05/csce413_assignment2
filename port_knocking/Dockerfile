@@ -14,8 +14,11 @@ RUN apt-get update && \
         lsb-release \
         apt-transport-https \
         wget \
-        curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Force legacy iptables
+RUN update-alternatives --set iptables /usr/sbin/iptables-legacy && \
+    update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 
 COPY knock_server.py knock_client.py ./
 
