@@ -36,51 +36,44 @@ def allow_ip(ip, port):
     logging.info(f"[+] {ip} is now allowed to access port {port}")
 
 def knock_listener(sequence, window_seconds, protected_port):
-    """Listen for knock sequence on UDP ports."""
     logger = logging.getLogger("KnockServer")
-    sockets = []
+    sockets = {}
 
-    # Bind UDP sockets for knocking
     for port in sequence:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("", port))
-        sockets.append(sock)
+        sock.setblocking(False)
+        sockets[port] = sock
 
-    logger.info(f"[*] Listening for knocks on ports {sequence}")
+    logger.info(f"[*] Listening for knocks on {sequence}")
 
     while True:
-        for sock, expected_port in zip(sockets, sequence):
-            sock.settimeout(0.1)
+        for port, sock in sockets.items():
             try:
                 _, addr = sock.recvfrom(1024)
                 ip = addr[0]
-
-                # Handle Docker NAT: if IP is localhost, get host IP
-                if ip == "127.0.0.1":
-                    ip = subprocess.getoutput("ip route get 1 | awk '{print $5}'").strip()
-
                 now = time.time()
-                logger.info(f"Knock received from {ip} on port {expected_port}")
+                logger.info(f"Knock from {ip} on {port}")
 
                 with lock:
                     if ip not in clients_progress:
                         clients_progress[ip] = []
 
-                    clients_progress[ip].append((expected_port, now))
-                    # Keep only recent knocks in the window
-                    clients_progress[ip] = [(p, t) for p, t in clients_progress[ip] if now - t <= window_seconds]
+                    clients_progress[ip].append((port, now))
+                    clients_progress[ip] = [
+                        (p, t) for p, t in clients_progress[ip]
+                        if now - t <= window_seconds
+                    ]
 
                     ports = [p for p, _ in clients_progress[ip]]
-                    if ports[-len(sequence):] == sequence and ip not in clients_allowed:
+
+                    if ports[-len(sequence):] == sequence:
                         logger.info(f"[+] {ip} completed knock sequence!")
-                        clients_allowed.add(ip)
                         allow_ip(ip, protected_port)
                         clients_progress[ip] = []
 
-            except socket.timeout:
+            except BlockingIOError:
                 continue
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Port knocking server for SSH")
     parser.add_argument(
