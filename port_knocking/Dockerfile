@@ -1,12 +1,21 @@
-FROM python:3.11
+FROM python:3.11-slim
 
 WORKDIR /app
 
 RUN apt-get update && \
-    apt-get install -y iptables iproute2 iptables-legacy netcat-openbsd && \
-    rm -rf /var/lib/apt/lists/*
-RUN update-alternatives --set iptables /usr/sbin/iptables-legacy && \
-    update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        iptables \
+        iproute2 \
+        iptables-legacy \
+        netcat-openbsd \
+        ca-certificates \
+        gnupg \
+        dirmngr \
+        lsb-release \
+        apt-transport-https \
+        wget \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY knock_server.py knock_client.py ./
 
