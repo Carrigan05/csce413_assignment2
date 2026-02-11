@@ -101,11 +101,11 @@ services:
       - ./honeypot/logs:/app/logs
 
   # TODO: Feel free to update port_knocking if needed
+services:
   port_knocking:
     container_name: 2_network_port_knocking
     build:
       context: ./port_knocking
-      network: host
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -115,6 +115,7 @@ services:
       - "1234:1234/udp"
       - "5678:5678/udp"
       - "9012:9012/udp"
+
     networks:
       vulnerable_network:
         ipv4_address: 172.20.0.40
@@ -129,6 +130,7 @@ networks:
 
 volumes:
   db_data:
+
 
 
 
