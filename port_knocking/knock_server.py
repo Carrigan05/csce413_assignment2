@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 """Starter template for the port knocking server."""
 
-Exactly — yes! Your server still needs a proper main() entry point to parse arguments and call the listen_for_knocks() function. I left that out in the snippet to focus on the core logic.
-
-Here’s a full, working knock_server.py that works with your minimal Dockerfile without needing iptables, fully self-contained:
-
 import argparse
 import logging
 import socket
