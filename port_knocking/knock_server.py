@@ -41,11 +41,12 @@ def knock_listener(sequence, window_seconds, protected_port):
 
     for port in sequence:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("", port))
-        sock.setblocking(False)
+        sock.setblocking(False)  # Non-blocking
         sockets[port] = sock
 
-    logger.info(f"[*] Listening for knocks on {sequence}")
+    logger.info(f"[*] Listening for knocks on ports {sequence}")
 
     while True:
         for port, sock in sockets.items():
@@ -53,7 +54,7 @@ def knock_listener(sequence, window_seconds, protected_port):
                 _, addr = sock.recvfrom(1024)
                 ip = addr[0]
                 now = time.time()
-                logger.info(f"Knock from {ip} on {port}")
+                logger.info(f"Knock received from {ip} on port {port}")
 
                 with lock:
                     if ip not in clients_progress:
@@ -61,15 +62,15 @@ def knock_listener(sequence, window_seconds, protected_port):
 
                     clients_progress[ip].append((port, now))
                     clients_progress[ip] = [
-                        (p, t) for p, t in clients_progress[ip]
-                        if now - t <= window_seconds
+                        (p, t) for p, t in clients_progress[ip] if now - t <= window_seconds
                     ]
 
                     ports = [p for p, _ in clients_progress[ip]]
-
-                    if ports[-len(sequence):] == sequence:
+                    if ports[-len(sequence):] == sequence and ip not in clients_allowed:
                         logger.info(f"[+] {ip} completed knock sequence!")
-                        allow_ip(ip, protected_port)
+                        clients_allowed.add(ip)
+                        # Uncomment if you want to manipulate iptables
+                        # allow_ip(ip, protected_port)
                         clients_progress[ip] = []
 
             except BlockingIOError:
