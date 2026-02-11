@@ -115,7 +115,6 @@ services:
       - "1234:1234/udp"
       - "5678:5678/udp"
       - "9012:9012/udp"
-      - "2222:2222/tcp"
     networks:
       vulnerable_network:
         ipv4_address: 172.20.0.40
@@ -130,5 +129,6 @@ networks:
 
 volumes:
   db_data:
+
 
 
