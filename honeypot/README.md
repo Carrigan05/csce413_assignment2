@@ -1,16 +1,4 @@
-## Honeypot Starter Template
+### Honeypot Design
 
-This directory is a starter template for the honeypot portion of the assignment.
+The honeypot is a decoy ssh service that is designed to trick users into believing it is real and monitor unauthorized access attempts. It listens on a designated port and presents realistic things for the user to interact with. The honeypot consists of two main components, honeypot.py and  logger.py. The honeypot accepts incoming connections, records authentication attempts, and simulates an environment to capture an attacker's commands. All the logs are written to the honeypot.log file in the logs folder of honeypot. The logger records the user's IP address, timestamp, authentication attempts, and any commands attempted by the attacker. This design supports the detection of brute force attacks and reconnaissance activity.
 
-### What you need to implement
-- Choose a protocol (SSH, HTTP, or multi-protocol).
-- Simulate a convincing service banner and responses.
-- Log connection metadata, authentication attempts, and attacker actions.
-- Store logs under `logs/` and include an `analysis.md` summary.
-- Update `honeypot.py` and `logger.py` (and add modules as needed) to implement the honeypot.
-
-### Getting started
-1. Implement your honeypot logic in `honeypot.py`.
-2. Wire logging in `logger.py` and record results in `logs/`.
-3. Summarize your findings in `analysis.md`.
-4. Run from the repo root with `docker-compose up honeypot`.
