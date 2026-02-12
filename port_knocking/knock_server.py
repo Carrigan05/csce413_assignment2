@@ -13,9 +13,10 @@ DEFAULT_PROTECTED_PORT = 2222
 DEFAULT_SEQUENCE_WINDOW = 10.0
 
 clients_allowed = set()
-clients_progress = {}  # {IP: [(port, timestamp), ...]}
+clients_progress = {}  
 lock = threading.Lock()
 
+# Configure logging format and level
 def setup_logging():
     logging.basicConfig(
         level=logging.INFO,
@@ -23,11 +24,13 @@ def setup_logging():
         handlers=[logging.StreamHandler()],
     )
 
+# Block the protected port for everyone using iptables.
 def block_port(port):
     """Block the protected SSH port for all IPs initially."""
     subprocess.run(["iptables", "-A", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP"])
     logging.info(f"[*] Port {port} blocked for all IPs")
 
+# Allow a specific IP to access the protected port
 def allow_ip(ip, port):
     """Allow a specific IP to access the SSH port."""
     subprocess.run([
@@ -35,6 +38,7 @@ def allow_ip(ip, port):
     ])
     logging.info(f"[+] {ip} is now allowed to access port {port}")
 
+# Listen for UDP knocks on each port in the sequence
 def knock_listener(sequence, window_seconds, protected_port):
     logger = logging.getLogger("KnockServer")
     sockets = {}
@@ -43,7 +47,7 @@ def knock_listener(sequence, window_seconds, protected_port):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("", port))
-        sock.setblocking(False)  # Non-blocking
+        sock.setblocking(False) 
         sockets[port] = sock
 
     logger.info(f"[*] Listening for knocks on ports {sequence}")
@@ -69,7 +73,6 @@ def knock_listener(sequence, window_seconds, protected_port):
                     if ports[-len(sequence):] == sequence and ip not in clients_allowed:
                         logger.info(f"[+] {ip} completed knock sequence!")
                         clients_allowed.add(ip)
-                        # Uncomment if you want to manipulate iptables
                         allow_ip(ip, protected_port)
                         clients_progress[ip] = []
 

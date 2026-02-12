@@ -6,13 +6,14 @@ import threading
 import time
 from logger import create_logger, log_auth_attempt, log_command
 
-HOST = "0.0.0.0"  # Listen on all interfaces
-PORT = 2222       # Use 2222 for testing, avoid requiring root for 22
+HOST = "0.0.0.0"  
+PORT = 22       
 
 logger = create_logger()
 
 BANNER = "SSH-2.0-OpenSSH_7.9p1 FakeSSH_1.0\r\n"
 
+# Logs login attempts and fake shell commands
 def handle_client(client_socket, address):
     ip, port = address
     logger.info(f"Connection from {ip}:{port}")
